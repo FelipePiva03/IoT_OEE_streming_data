@@ -125,3 +125,9 @@ class StateMachine:
             MachineStatus.SETUP: MachineStatus.RUNNING,
         }
         return auto_transitions.get(self.current_state)
+    
+    def get_state_progress(self) -> float:
+        """Retorna progresso no estado atual (0.0 - 1.0)"""
+        if self.state_duration == 0:
+            return 0.0
+        return min(1.0, self.time_in_state / self.state_duration)
