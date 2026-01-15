@@ -54,9 +54,9 @@ flowchart LR
 ```mermaid
 flowchart TB
     subgraph INPUT["📥 Eventos Gerados"]
-        E1["machine_events\nstatus, ciclos, paradas"]
-        E2["sensor_metrics\ntemperatura, vibração, velocidade"]
-        E3["quality_events\ninspeção OK/NOK"]
+        E1["machine_events, status, ciclos, paradas"]
+        E2["sensor_metrics, temperatura, vibração, velocidade"]
+        E3["quality_events, inspeção OK/NOK"]
     end
 
     subgraph PROCESS["⚙️ Processamento"]
