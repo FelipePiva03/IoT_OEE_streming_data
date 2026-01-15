@@ -8,12 +8,12 @@ Pipeline de streaming para monitoramento de OEE (Overall Equipment Effectiveness
 flowchart LR
     subgraph INGESTION["Data Ingestion"]
         PY[["Python Producer"]]
-        SIM[("IoT Simulator\n5 Machines")]
+        SIM[("IoT Simulator\ 5 Machines")]
     end
 
     subgraph STREAMING["Message Broker"]
         direction TB
-        K{{"Apache Kafka\nConfluent Cloud"}}
+        K{{"Apache Kafka Confluent Cloud"}}
         T1[(machine_events)]
         T2[(sensor_metrics)]
         T3[(quality_events)]
@@ -23,8 +23,8 @@ flowchart LR
     end
 
     subgraph PROCESSING["Stream Processing"]
-        SPK[["Spark Structured\nStreaming"]]
-        DBR[("Databricks\nRuntime")]
+        SPK[["Spark Structured Streaming"]]
+        DBR[("Databricks  Runtime")]
     end
 
     subgraph STORAGE["Data Lake"]
