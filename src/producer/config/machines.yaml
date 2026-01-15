@@ -1,0 +1,166 @@
+# Configuração das 5 máquinas industriais
+machines:
+  - id: M001
+    name: "CNC Lathe Alpha"
+    type: CNC_LATHE
+    location: "Production Line A"
+    specs:
+      max_temperature: 85.0        # °C
+      optimal_temperature: 65.0
+      max_vibration: 5.0            # mm/s
+      optimal_vibration: 1.5
+      max_rpm: 2000
+      optimal_rpm: 1500
+      max_pressure: 8.0             # bar
+      optimal_pressure: 6.5
+      cycle_time: 45                # segundos
+    reliability:
+      base_uptime: 0.95             # 95% uptime
+      mtbf_hours: 120               # Mean Time Between Failures
+      mttr_hours: 2                 # Mean Time To Repair
+    degradation:
+      temperature_increase_rate: 0.05  # °C por hora de operação
+      vibration_increase_rate: 0.02    # mm/s por hora
+      quality_degradation_rate: 0.001  # redução % por hora
+    shift_schedule:
+      - start: "06:00"
+        end: "14:00"
+        efficiency: 0.98
+      - start: "14:00"
+        end: "22:00"
+        efficiency: 0.95
+      - start: "22:00"
+        end: "06:00"
+        efficiency: 0.90
+
+  - id: M002
+    name: "Milling Machine Beta"
+    type: MILLING_MACHINE
+    location: "Production Line A"
+    specs:
+      max_temperature: 80.0
+      optimal_temperature: 60.0
+      max_vibration: 4.5
+      optimal_vibration: 1.2
+      max_rpm: 1800
+      optimal_rpm: 1400
+      max_pressure: 7.5
+      optimal_pressure: 6.0
+      cycle_time: 60
+    reliability:
+      base_uptime: 0.92
+      mtbf_hours: 100
+      mttr_hours: 2.5
+    degradation:
+      temperature_increase_rate: 0.06
+      vibration_increase_rate: 0.03
+      quality_degradation_rate: 0.0015
+    shift_schedule:
+      - start: "06:00"
+        end: "14:00"
+        efficiency: 0.97
+      - start: "14:00"
+        end: "22:00"
+        efficiency: 0.94
+      - start: "22:00"
+        end: "06:00"
+        efficiency: 0.88
+
+  - id: M003
+    name: "Hydraulic Press Gamma"
+    type: PRESS
+    location: "Production Line B"
+    specs:
+      max_temperature: 70.0
+      optimal_temperature: 50.0
+      max_vibration: 3.0
+      optimal_vibration: 0.8
+      max_rpm: 500
+      optimal_rpm: 350
+      max_pressure: 10.0
+      optimal_pressure: 8.5
+      cycle_time: 30
+    reliability:
+      base_uptime: 0.98
+      mtbf_hours: 150
+      mttr_hours: 1.5
+    degradation:
+      temperature_increase_rate: 0.03
+      vibration_increase_rate: 0.015
+      quality_degradation_rate: 0.0008
+    shift_schedule:
+      - start: "06:00"
+        end: "14:00"
+        efficiency: 0.99
+      - start: "14:00"
+        end: "22:00"
+        efficiency: 0.96
+      - start: "22:00"
+        end: "06:00"
+        efficiency: 0.92
+
+  - id: M004
+    name: "CNC Lathe Delta (Legacy)"
+    type: CNC_LATHE
+    location: "Production Line B"
+    specs:
+      max_temperature: 85.0
+      optimal_temperature: 65.0
+      max_vibration: 5.5
+      optimal_vibration: 2.0
+      max_rpm: 2000
+      optimal_rpm: 1500
+      max_pressure: 8.0
+      optimal_pressure: 6.5
+      cycle_time: 50
+    reliability:
+      base_uptime: 0.88              # Máquina mais antiga
+      mtbf_hours: 80
+      mttr_hours: 3
+    degradation:
+      temperature_increase_rate: 0.08  # Degrada mais rápido
+      vibration_increase_rate: 0.04
+      quality_degradation_rate: 0.002
+    shift_schedule:
+      - start: "06:00"
+        end: "14:00"
+        efficiency: 0.95
+      - start: "14:00"
+        end: "22:00"
+        efficiency: 0.92
+      - start: "22:00"
+        end: "06:00"
+        efficiency: 0.85
+
+  - id: M005
+    name: "Welding Robot Epsilon"
+    type: WELDING_ROBOT
+    location: "Production Line C"
+    specs:
+      max_temperature: 95.0
+      optimal_temperature: 70.0
+      max_vibration: 2.5
+      optimal_vibration: 0.5
+      max_rpm: 1200
+      optimal_rpm: 900
+      max_pressure: 6.0
+      optimal_pressure: 5.0
+      cycle_time: 40
+    reliability:
+      base_uptime: 0.93
+      mtbf_hours: 110
+      mttr_hours: 2
+    degradation:
+      temperature_increase_rate: 0.07
+      vibration_increase_rate: 0.025
+      quality_degradation_rate: 0.0012
+    shift_schedule:
+      - start: "06:00"
+        end: "14:00"
+        efficiency: 0.98
+      - start: "14:00"
+        end: "22:00"
+        efficiency: 0.95
+      - start: "22:00"
+        end: "06:00"
+        efficiency: 0.91
