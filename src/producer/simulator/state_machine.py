@@ -49,21 +49,24 @@ class StateMachine:
     
     # Durações típicas (em segundos)
     STATE_DURATIONS: Dict[MachineStatus, tuple] = {
-        MachineStatus.IDLE: (600, 3600),           # 10min - 1h
-        MachineStatus.WARMUP: (180, 420),          # 3min - 7min
-        MachineStatus.RUNNING: (1800, 14400),      # 30min - 4h
-        MachineStatus.SETUP: (300, 900),           # 5min - 15min
-        MachineStatus.PLANNED_DOWNTIME: (1800, 3600),  # 30min - 1h
-        MachineStatus.UNPLANNED_DOWNTIME: (600, 7200), # 10min - 2h
-        MachineStatus.MAINTENANCE: (7200, 18000),  # 2h - 5h
-        MachineStatus.COOLDOWN: (120, 300),        # 2min - 5min
+        MachineStatus.IDLE: (5, 15),               # 5s - 15s (para testes rápidos)
+        MachineStatus.WARMUP: (10, 20),            # 10s - 20s
+        MachineStatus.RUNNING: (30, 120),          # 30s - 2min
+        MachineStatus.SETUP: (15, 30),             # 15s - 30s
+        MachineStatus.PLANNED_DOWNTIME: (20, 40),  # 20s - 40s
+        MachineStatus.UNPLANNED_DOWNTIME: (25, 60), # 25s - 1min
+        MachineStatus.MAINTENANCE: (40, 80),       # 40s - 80s
+        MachineStatus.COOLDOWN: (10, 20),          # 10s - 20s
     }
 
     def __init__(self, initial_state: MachineStatus = MachineStatus.IDLE):
         self.current_state: MachineStatus = initial_state
         self.state_start_time = 0
-        self.state_duration = 0
         self.time_in_state = 0
+
+        # Define duração inicial do estado
+        min_duration, max_duration = self.STATE_DURATIONS[initial_state]
+        self.state_duration = random.uniform(min_duration, max_duration)
 
     def can_transition_to(self, target_state: MachineStatus) -> bool:
         """
@@ -118,6 +121,7 @@ class StateMachine:
     def _get_next_automatic_state(self) -> Optional[MachineStatus]:
         """Determina próximo estado automático baseado no estado atual"""
         auto_transitions = {
+            MachineStatus.IDLE: MachineStatus.WARMUP,  # IDLE sempre vai para WARMUP
             MachineStatus.WARMUP: MachineStatus.RUNNING,
             MachineStatus.COOLDOWN: MachineStatus.IDLE,
             MachineStatus.MAINTENANCE: MachineStatus.WARMUP,

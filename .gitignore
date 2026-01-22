@@ -205,3 +205,56 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Docker
+*.env.local
+docker-compose.override.yml
+
+# Kafka data
+kafka-data/
+zookeeper-data/
+zookeeper-logs/
+
+# Data Lake
+data/bronze/
+data/silver/
+data/gold/
+*.parquet
+*.delta
+
+# ML Models
+models/*.pkl
+models/*.h5
+models/*.pt
+models/*.onnx
+
+# Jupyter Notebooks
+*.ipynb_checkpoints
+notebooks/*.html
+
+# Output files
+output/
+*.csv
+*.jsonl
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+*.py,cover
+
+# Claude AI
+.claude/
+
+# GitHub workflows and CI/CD
+.github/
