@@ -27,8 +27,14 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
     volumes:
       - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
 
   # Schema Registry
   schema-registry:
@@ -53,6 +59,55 @@ services:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+
+  # IoT Simulator - Modo Normal (tempo real)
+  simulator:
+    build: .
+    container_name: iot-simulator
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SIMULATION_SPEED: "1.0"
+      TIME_MULTIPLIER: "1.0"
+      ENABLE_FAILURE_INJECTION: "true"
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+    restart: unless-stopped
+    profiles:
+      - normal
+
+  # IoT Simulator - Modo Acelerado (1 mês em ~10 minutos)
+  # TIME_MULTIPLIER = 4320 -> 30 dias em 10 minutos
+  simulator-monthly:
+    build: .
+    container_name: iot-simulator-monthly
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SIMULATION_SPEED: "10.0"
+      TIME_MULTIPLIER: "4320.0"
+      ENABLE_FAILURE_INJECTION: "true"
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+    restart: "no"
+    profiles:
+      - monthly
+
+  # IoT Simulator - Modo Ultra Acelerado (1 mês em ~1 minuto)
+  simulator-ultra-fast:
+    build: .
+    container_name: iot-simulator-ultra-fast
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SIMULATION_SPEED: "50.0"
+      TIME_MULTIPLIER: "43200.0"
+      ENABLE_FAILURE_INJECTION: "true"
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+    restart: "no"
+    profiles:
+      - ultra-fast
 
 volumes:
   zookeeper-data:

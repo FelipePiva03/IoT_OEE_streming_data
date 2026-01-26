@@ -18,6 +18,7 @@ machines:
       base_uptime: 0.95             # 95% uptime
       mtbf_hours: 120               # Mean Time Between Failures
       mttr_hours: 2                 # Mean Time To Repair
+      failure_injection_rate: 0.03  # 3% chance de injetar anomalias para ML
     degradation:
       temperature_increase_rate: 0.05  # °C por hora de operação
       vibration_increase_rate: 0.02    # mm/s por hora
@@ -51,6 +52,7 @@ machines:
       base_uptime: 0.92
       mtbf_hours: 100
       mttr_hours: 2.5
+      failure_injection_rate: 0.04  # 4% - máquina mais propensa a anomalias
     degradation:
       temperature_increase_rate: 0.06
       vibration_increase_rate: 0.03
@@ -84,6 +86,7 @@ machines:
       base_uptime: 0.98
       mtbf_hours: 150
       mttr_hours: 1.5
+      failure_injection_rate: 0.02  # 2% - máquina mais confiável
     degradation:
       temperature_increase_rate: 0.03
       vibration_increase_rate: 0.015
@@ -117,6 +120,7 @@ machines:
       base_uptime: 0.88              # Máquina mais antiga
       mtbf_hours: 80
       mttr_hours: 3
+      failure_injection_rate: 0.08  # 8% - máquina legacy com mais problemas
     degradation:
       temperature_increase_rate: 0.08  # Degrada mais rápido
       vibration_increase_rate: 0.04
@@ -150,6 +154,7 @@ machines:
       base_uptime: 0.93
       mtbf_hours: 110
       mttr_hours: 2
+      failure_injection_rate: 0.05  # 5% - taxa moderada de anomalias
     degradation:
       temperature_increase_rate: 0.07
       vibration_increase_rate: 0.025

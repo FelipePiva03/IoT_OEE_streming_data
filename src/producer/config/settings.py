@@ -43,5 +43,20 @@ class SimulatorSettings:
     
     # Simulação
     SIMULATION_SPEED: float = 1.0  # 1.0 = tempo real, 10.0 = 10x mais rápido
+    TIME_MULTIPLIER: float = 1.0   # Multiplicador de tempo simulado (1440 = 1 dia em 1 minuto)
+
+    # Injeção de falhas para ML
+    ENABLE_FAILURE_INJECTION: bool = True  # Ativa injeção de anomalias
+    FAILURE_TYPES: list = None  # Tipos de anomalias a injetar
+
+    def __post_init__(self):
+        if self.FAILURE_TYPES is None:
+            self.FAILURE_TYPES = [
+                "temperature_spike",    # Pico de temperatura
+                "vibration_anomaly",    # Vibração anormal
+                "pressure_drop",        # Queda de pressão
+                "speed_fluctuation",    # Flutuação de velocidade
+                "power_surge"           # Pico de consumo
+            ]
 
 settings = SimulatorSettings()

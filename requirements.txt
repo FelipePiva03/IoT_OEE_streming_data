@@ -1,0 +1,22 @@
+# IoT/OEE Simulator Dependencies
+
+# Data Processing
+pydantic>=2.0.0
+pyyaml>=6.0
+
+# Kafka Integration
+kafka-python>=2.0.2
+confluent-kafka>=2.3.0
+
+# Optional: Avro for Schema Registry
+avro-python3>=1.10.0
+fastavro>=1.9.0
+
+# Development & Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+pytest-xdist>=3.0.0
+pytest-watch>=4.2.0
+black>=23.0.0
+flake8>=6.0.0
