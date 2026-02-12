@@ -11,11 +11,15 @@ from src.producer.schemas.events import (
     MachineEvent,
     SensorMetric,
     QualityEvent,
+    AnomalyEvent,
     MachineStatus,
     EventType,
     QualityResult,
     DefectType,
-    AlertLevel
+    AlertLevel,
+    AnomalyType,
+    AnomalySeverity,
+    ANOMALY_PROFILES
 )
 from src.producer.simulator.state_machine import StateMachine
 from src.producer.config.settings import settings
@@ -72,13 +76,19 @@ class MachineSimulator:
 
         # Injeção de falhas (para treinamento de ML)
         self.anomaly_active = False
-        self.anomaly_type = None
+        self.anomaly_type: Optional[AnomalyType] = None
+        self.anomaly_severity: Optional[AnomalySeverity] = None
         self.anomaly_duration = 0
+        self.anomaly_start_time = 0
+        self.anomaly_is_precursor = False
+        self.anomaly_base_values = {}  # Valores normais antes da anomalia
+        self.pending_anomaly_event: Optional[AnomalyEvent] = None
 
     def update(self, current_time: float, elapsed: float) -> Tuple[
         Optional[MachineEvent],
         Optional[SensorMetric],
-        Optional[QualityEvent]
+        Optional[QualityEvent],
+        Optional[AnomalyEvent]
     ]:
         """
         Atualiza estado da máquina e retorna eventos gerados
@@ -88,12 +98,13 @@ class MachineSimulator:
             elapsed: tempo decorrido desde última atualização
 
         Returns:
-            Tupla com (MachineEvent, SensorMetric, QualityEvent)
+            Tupla com (MachineEvent, SensorMetric, QualityEvent, AnomalyEvent)
             Qualquer um pode ser None se não houver evento nesse ciclo
         """
         machine_event = None
         sensor_metric = None
         quality_event = None
+        anomaly_event = None
 
         # Atualiza máquina de estados
         previous_state = self.state_machine.current_state
@@ -132,12 +143,12 @@ class MachineSimulator:
 
         # Injeta anomalias se habilitado (para ML)
         if settings.ENABLE_FAILURE_INJECTION and sensor_metric:
-            sensor_metric = self._inject_anomaly(sensor_metric, current_time, elapsed)
+            sensor_metric, anomaly_event = self._inject_anomaly(sensor_metric, current_time, elapsed)
 
         # Verifica se precisa de manutenção
         self._check_maintenance_need(current_time)
 
-        return machine_event, sensor_metric, quality_event
+        return machine_event, sensor_metric, quality_event, anomaly_event
 
     def _generate_machine_event(
         self,
@@ -277,49 +288,170 @@ class MachineSimulator:
         sensor_metric: SensorMetric,
         current_time: float,
         elapsed: float
-    ) -> SensorMetric:
+    ) -> Tuple[SensorMetric, Optional[AnomalyEvent]]:
         """
         Injeta anomalias nos dados dos sensores para treinamento de ML
+
+        Returns:
+            Tupla (SensorMetric modificado, AnomalyEvent se nova anomalia iniciou)
         """
+        anomaly_event = None
+
         # Verifica se deve iniciar uma nova anomalia
         if not self.anomaly_active:
             if random.random() < self.config.failure_injection_rate:
-                self.anomaly_active = True
-                self.anomaly_type = random.choice(settings.FAILURE_TYPES)
-                self.anomaly_duration = random.uniform(30, 180)  # 30s a 3min
-                print(f"\n[ANOMALY INJECTED] {self.config.machine_id}: {self.anomaly_type} for {self.anomaly_duration:.0f}s")
+                anomaly_event = self._start_anomaly(sensor_metric, current_time)
 
         # Se há anomalia ativa, modifica as métricas
         if self.anomaly_active:
-            if self.anomaly_type == "temperature_spike":
-                # Temperatura acima do limite
-                sensor_metric.temperature = self.config.max_temperature * random.uniform(1.05, 1.25)
-
-            elif self.anomaly_type == "vibration_anomaly":
-                # Vibração anormal
-                sensor_metric.vibration = self.config.max_vibration * random.uniform(1.1, 1.5)
-
-            elif self.anomaly_type == "pressure_drop":
-                # Queda de pressão
-                sensor_metric.pressure = self.config.optimal_pressure * random.uniform(0.3, 0.6)
-
-            elif self.anomaly_type == "speed_fluctuation":
-                # RPM oscilando
-                fluctuation = random.choice([-1, 1]) * random.randint(200, 500)
-                sensor_metric.speed_rpm = max(0, sensor_metric.speed_rpm + fluctuation)
-
-            elif self.anomaly_type == "power_surge":
-                # Pico de consumo
-                sensor_metric.power_consumption *= random.uniform(1.5, 2.5)
+            sensor_metric = self._apply_anomaly_effect(sensor_metric, current_time)
 
             # Decrementa duração da anomalia
             self.anomaly_duration -= elapsed
             if self.anomaly_duration <= 0:
-                self.anomaly_active = False
-                self.anomaly_type = None
-                print(f"\n[ANOMALY ENDED] {self.config.machine_id}: Anomalia finalizada")
+                self._end_anomaly(current_time)
+
+        return sensor_metric, anomaly_event
+
+    def _start_anomaly(
+        self,
+        sensor_metric: SensorMetric,
+        current_time: float
+    ) -> AnomalyEvent:
+        """Inicia uma nova anomalia e retorna o evento"""
+        # Escolhe tipo de anomalia aleatoriamente
+        self.anomaly_type = random.choice(list(AnomalyType))
+        profile = ANOMALY_PROFILES[self.anomaly_type]
+
+        # Define severidade baseada no perfil e desgaste
+        severity_low, severity_high = profile["severity_range"]
+        if self.wear_factor > 0.7:
+            # Máquina desgastada = anomalias mais severas
+            self.anomaly_severity = severity_high
+        elif self.wear_factor > 0.4:
+            self.anomaly_severity = random.choice([severity_low, severity_high])
+        else:
+            self.anomaly_severity = severity_low
+
+        # Define duração baseada no perfil
+        min_dur, max_dur = profile["duration_range"]
+        self.anomaly_duration = random.uniform(min_dur, max_dur)
+
+        # Marca características
+        self.anomaly_active = True
+        self.anomaly_start_time = current_time
+        self.anomaly_is_precursor = profile["precursor_pattern"]
+
+        # Salva valores base para calcular deltas
+        self.anomaly_base_values = {
+            "temperature": sensor_metric.temperature,
+            "vibration": sensor_metric.vibration,
+            "pressure": sensor_metric.pressure,
+            "speed_rpm": sensor_metric.speed_rpm,
+            "power_consumption": sensor_metric.power_consumption,
+        }
+
+        # Log por severidade (sem emojis para compatibilidade Windows)
+        severity_label = {
+            AnomalySeverity.LOW: "[LOW]",
+            AnomalySeverity.MEDIUM: "[MEDIUM]",
+            AnomalySeverity.HIGH: "[HIGH]",
+            AnomalySeverity.CRITICAL: "[CRITICAL]",
+        }.get(self.anomaly_severity, "[?]")
+
+        print(f"\n{severity_label} [ANOMALY] {self.config.machine_id}: "
+              f"{self.anomaly_type.value} | Severidade: {self.anomaly_severity.value} | "
+              f"Duracao: {self.anomaly_duration:.0f}s | Precursor: {self.anomaly_is_precursor}")
+
+        # Cria evento de anomalia
+        timestamp = datetime.fromtimestamp(current_time).strftime(settings.TIMESTAMP_FORMAT)
+
+        return AnomalyEvent(
+            machine_id=self.config.machine_id,
+            timestamp=timestamp,
+            anomaly_type=self.anomaly_type.value,
+            severity=self.anomaly_severity.value,
+            duration_seconds=self.anomaly_duration,
+            is_precursor=self.anomaly_is_precursor,
+            temperature=sensor_metric.temperature,
+            vibration=sensor_metric.vibration,
+            pressure=sensor_metric.pressure,
+            speed_rpm=sensor_metric.speed_rpm,
+            power_consumption=sensor_metric.power_consumption,
+            operating_hours=self.operating_hours,
+            wear_factor=round(self.wear_factor, 3),
+            cycles_since_maintenance=self.total_cycles,
+        )
+
+    def _apply_anomaly_effect(
+        self,
+        sensor_metric: SensorMetric,
+        current_time: float
+    ) -> SensorMetric:
+        """Aplica o efeito da anomalia nos sensores"""
+        profile = ANOMALY_PROFILES[self.anomaly_type]
+        mult_low, mult_high = profile["multiplier_range"]
+
+        # Calcula progresso da anomalia (0.0 a 1.0)
+        total_duration = self.anomaly_duration + (current_time - self.anomaly_start_time)
+        progress = min(1.0, (current_time - self.anomaly_start_time) / total_duration) if total_duration > 0 else 0
+
+        # Para anomalias precursoras, o efeito aumenta gradualmente
+        if self.anomaly_is_precursor:
+            intensity = 0.3 + (0.7 * progress)  # Começa em 30%, termina em 100%
+        else:
+            intensity = 1.0  # Efeito imediato
+
+        multiplier = mult_low + (mult_high - mult_low) * random.random() * intensity
+
+        # Aplica efeito baseado no tipo de anomalia
+        if self.anomaly_type in [AnomalyType.TEMPERATURE_SPIKE, AnomalyType.TEMPERATURE_DRIFT, AnomalyType.OVERHEATING]:
+            sensor_metric.temperature = self.config.max_temperature * multiplier
+
+        elif self.anomaly_type in [AnomalyType.VIBRATION_SPIKE, AnomalyType.VIBRATION_PATTERN, AnomalyType.BEARING_WEAR]:
+            sensor_metric.vibration = self.config.max_vibration * multiplier
+
+        elif self.anomaly_type in [AnomalyType.PRESSURE_DROP, AnomalyType.PRESSURE_LEAK]:
+            sensor_metric.pressure = self.config.optimal_pressure * multiplier
+
+        elif self.anomaly_type == AnomalyType.PRESSURE_SPIKE:
+            sensor_metric.pressure = self.config.max_pressure * multiplier
+
+        elif self.anomaly_type in [AnomalyType.POWER_SURGE, AnomalyType.POWER_FLUCTUATION, AnomalyType.MOTOR_DEGRADATION]:
+            base_power = self.anomaly_base_values.get("power_consumption", 15.0)
+            sensor_metric.power_consumption = base_power * multiplier
+
+        elif self.anomaly_type in [AnomalyType.SPEED_FLUCTUATION, AnomalyType.SPEED_DROP]:
+            base_rpm = self.anomaly_base_values.get("speed_rpm", self.config.rated_speed)
+            sensor_metric.speed_rpm = int(base_rpm * multiplier)
+
+        elif self.anomaly_type == AnomalyType.MECHANICAL_WEAR:
+            # Afeta múltiplos sensores
+            sensor_metric.vibration = self.config.max_vibration * multiplier
+            sensor_metric.temperature = self.config.optimal_temperature * (1 + (multiplier - 1) * 0.5)
+            sensor_metric.power_consumption = self.anomaly_base_values.get("power_consumption", 15.0) * (1 + (multiplier - 1) * 0.3)
 
         return sensor_metric
+
+    def _end_anomaly(self, current_time: float):
+        """Finaliza a anomalia atual"""
+        profile = ANOMALY_PROFILES[self.anomaly_type]
+
+        # Verifica se anomalia leva a falha
+        if random.random() < profile["leads_to_failure"]:
+            # Forca transicao para UNPLANNED_DOWNTIME
+            if self.state_machine.can_transition_to(MachineStatus.UNPLANNED_DOWNTIME):
+                self.state_machine.transition_to(MachineStatus.UNPLANNED_DOWNTIME, current_time)
+                print(f"   [!] Anomalia causou FALHA em {self.config.machine_id}!")
+
+        print(f"   [OK] [ANOMALY ENDED] {self.config.machine_id}: {self.anomaly_type.value}")
+
+        # Reset estado
+        self.anomaly_active = False
+        self.anomaly_type = None
+        self.anomaly_severity = None
+        self.anomaly_is_precursor = False
+        self.anomaly_base_values = {}
 
     def _generate_quality_event(self, current_time: float) -> QualityEvent:
         """Gera evento de inspeção de qualidade"""

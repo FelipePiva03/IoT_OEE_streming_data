@@ -81,7 +81,7 @@ class TestMachineSimulatorUpdate:
         """Testa que update retorna eventos"""
         current_time = time.time()
 
-        machine_event, sensor_metric, quality_event = machine_simulator.update(
+        machine_event, sensor_metric, quality_event, anomaly_event = machine_simulator.update(
             current_time, elapsed=5.0
         )
 
@@ -93,7 +93,7 @@ class TestMachineSimulatorUpdate:
         """Testa geração de métricas de sensores"""
         current_time = time.time()
 
-        _, sensor_metric, _ = machine_simulator.update(current_time, elapsed=5.0)
+        _, sensor_metric, _, _ = machine_simulator.update(current_time, elapsed=5.0)
 
         assert sensor_metric is not None
         assert isinstance(sensor_metric.temperature, float)
@@ -109,7 +109,7 @@ class TestMachineSimulatorUpdate:
         # Máquina começa em IDLE
         assert machine_simulator.state_machine.current_state == MachineStatus.IDLE
 
-        _, sensor_metric, _ = machine_simulator.update(current_time, elapsed=1.0)
+        _, sensor_metric, _, _ = machine_simulator.update(current_time, elapsed=1.0)
 
         # Em IDLE, RPM deve ser 0
         assert sensor_metric.speed_rpm == 0
@@ -164,7 +164,7 @@ class TestMachineEventGeneration:
         machine_simulator.state_machine.state_duration = 0.1
 
         # Update deve causar transição IDLE -> WARMUP
-        machine_event, _, _ = machine_simulator.update(current_time, elapsed=1.0)
+        machine_event, _, _, _ = machine_simulator.update(current_time, elapsed=1.0)
 
         assert machine_event is not None
         assert machine_event.event_type == EventType.STATUS_CHANGE.value
@@ -182,7 +182,7 @@ class TestMachineEventGeneration:
         # Simula múltiplas atualizações até gerar evento de ciclo
         machine_event = None
         for i in range(100):
-            machine_event, _, _ = machine_simulator.update(current_time + i, elapsed=5.0)
+            machine_event, _, _, _ = machine_simulator.update(current_time + i, elapsed=5.0)
             if machine_event and machine_event.event_type == EventType.CYCLE_COMPLETE.value:
                 break
 

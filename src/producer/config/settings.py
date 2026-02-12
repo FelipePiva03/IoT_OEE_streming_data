@@ -1,9 +1,22 @@
 """
 Configurações gerais para o simulador de dados
 """
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Literal, List
+
+
+def _get_env_bool(key: str, default: bool) -> bool:
+    """Lê variável de ambiente como boolean"""
+    value = os.getenv(key, str(default)).lower()
+    return value in ("true", "1", "yes", "on")
+
+
+def _get_env_float(key: str, default: float) -> float:
+    """Lê variável de ambiente como float"""
+    return float(os.getenv(key, str(default)))
+
 
 @dataclass
 class SimulatorSettings:
@@ -42,15 +55,37 @@ class SimulatorSettings:
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     
     # Simulação
-    SIMULATION_SPEED: float = 1.0  # 1.0 = tempo real, 10.0 = 10x mais rápido
-    TIME_MULTIPLIER: float = 1.0   # Multiplicador de tempo simulado (1440 = 1 dia em 1 minuto)
+    SIMULATION_SPEED: float = 2.0  # 1.0 = tempo real, 10.0 = 10x mais rápido
+    TIME_MULTIPLIER: float = 60.0   # Multiplicador de tempo simulado (1440 = 1 dia em 1 minuto)
 
     # Injeção de falhas para ML
     ENABLE_FAILURE_INJECTION: bool = True  # Ativa injeção de anomalias
-    FAILURE_TYPES: list = None  # Tipos de anomalias a injetar
+    FAILURE_TYPES: List[str] = field(default_factory=list)
+
+    # Kafka Configuration
+    KAFKA_ENABLED: bool = True
+    KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
+    KAFKA_TOPIC_MACHINE_EVENTS: str = "machine-events"
+    KAFKA_TOPIC_SENSOR_METRICS: str = "sensor-metrics"
+    KAFKA_TOPIC_QUALITY_EVENTS: str = "quality-events"
+    KAFKA_TOPIC_ANOMALY_EVENTS: str = "anomaly-events"
 
     def __post_init__(self):
-        if self.FAILURE_TYPES is None:
+        # Configurações de ambiente
+        self.SIMULATION_SPEED = _get_env_float("SIMULATION_SPEED", self.SIMULATION_SPEED)
+        self.TIME_MULTIPLIER = _get_env_float("TIME_MULTIPLIER", self.TIME_MULTIPLIER)
+        self.ENABLE_FAILURE_INJECTION = _get_env_bool("ENABLE_FAILURE_INJECTION", self.ENABLE_FAILURE_INJECTION)
+
+        # Kafka via ambiente
+        self.KAFKA_ENABLED = _get_env_bool("KAFKA_ENABLED", self.KAFKA_ENABLED)
+        self.KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", self.KAFKA_BOOTSTRAP_SERVERS)
+        self.KAFKA_TOPIC_MACHINE_EVENTS = os.getenv("KAFKA_TOPIC_MACHINE_EVENTS", self.KAFKA_TOPIC_MACHINE_EVENTS)
+        self.KAFKA_TOPIC_SENSOR_METRICS = os.getenv("KAFKA_TOPIC_SENSOR_METRICS", self.KAFKA_TOPIC_SENSOR_METRICS)
+        self.KAFKA_TOPIC_QUALITY_EVENTS = os.getenv("KAFKA_TOPIC_QUALITY_EVENTS", self.KAFKA_TOPIC_QUALITY_EVENTS)
+        self.KAFKA_TOPIC_ANOMALY_EVENTS = os.getenv("KAFKA_TOPIC_ANOMALY_EVENTS", self.KAFKA_TOPIC_ANOMALY_EVENTS)
+
+        # Tipos de falhas padrão
+        if not self.FAILURE_TYPES:
             self.FAILURE_TYPES = [
                 "temperature_spike",    # Pico de temperatura
                 "vibration_anomaly",    # Vibração anormal
@@ -58,5 +93,6 @@ class SimulatorSettings:
                 "speed_fluctuation",    # Flutuação de velocidade
                 "power_surge"           # Pico de consumo
             ]
+
 
 settings = SimulatorSettings()

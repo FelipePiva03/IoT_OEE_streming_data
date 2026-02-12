@@ -5,11 +5,12 @@ import time
 import json
 import yaml
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
 
 from src.producer.simulator.machine_simulator import MachineSimulator, MachineConfig
 from src.producer.config.settings import settings
+from src.producer.kafka.producer import KafkaEventProducer
 
 
 class IoTSimulator:
@@ -18,7 +19,7 @@ class IoTSimulator:
     Gerencia múltiplas máquinas e coleta eventos
     """
 
-    def __init__(self, machine_configs: List[MachineConfig]):
+    def __init__(self, machine_configs: List[MachineConfig], kafka_enabled: bool = None):
         self.machines: List[MachineSimulator] = []
 
         # Cria instância de cada máquina
@@ -30,10 +31,29 @@ class IoTSimulator:
         self.simulation_time = time.time()  # Tempo simulado (pode ser acelerado)
         self.iteration = 0
 
+        # Kafka Producer
+        kafka_enabled = kafka_enabled if kafka_enabled is not None else settings.KAFKA_ENABLED
+        self.kafka_producer: Optional[KafkaEventProducer] = None
+
+        if kafka_enabled:
+            try:
+                self.kafka_producer = KafkaEventProducer(
+                    bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+                    topic_machine_events=settings.KAFKA_TOPIC_MACHINE_EVENTS,
+                    topic_sensor_metrics=settings.KAFKA_TOPIC_SENSOR_METRICS,
+                    topic_quality_events=settings.KAFKA_TOPIC_QUALITY_EVENTS,
+                    topic_anomaly_events=settings.KAFKA_TOPIC_ANOMALY_EVENTS,
+                    enabled=True
+                )
+            except Exception as e:
+                print(f"[WARNING] Kafka desabilitado: {e}")
+                self.kafka_producer = None
+
         print(f"IoT Simulator iniciado com {len(self.machines)} máquinas")
         print(f"Intervalo de atualização: {settings.EVENT_INTERNAL_SECONDS}s")
         print(f"Velocidade de simulação: {settings.SIMULATION_SPEED}x")
         print(f"Multiplicador de tempo: {settings.TIME_MULTIPLIER}x")
+        print(f"Kafka: {'Habilitado' if self.kafka_producer else 'Desabilitado'}")
         if settings.TIME_MULTIPLIER > 1:
             days_per_minute = settings.TIME_MULTIPLIER * 60 / 86400
             print(f"  -> {days_per_minute:.2f} dias simulados por minuto real")
@@ -72,7 +92,13 @@ class IoTSimulator:
         except KeyboardInterrupt:
             print("\n\nSimulacao interrompida pelo usuario")
         finally:
+            self._cleanup()
             self._print_final_statistics()
+
+    def _cleanup(self):
+        """Limpa recursos (Kafka, etc)"""
+        if self.kafka_producer:
+            self.kafka_producer.close()
 
     def _update_all_machines(self):
         """Atualiza todas as máquinas e coleta eventos"""
@@ -87,27 +113,69 @@ class IoTSimulator:
             "quality_events": []
         }
 
+        # Objetos originais para envio ao Kafka
+        raw_events = {
+            "machine_events": [],
+            "sensor_metrics": [],
+            "quality_events": [],
+            "anomaly_events": []
+        }
+
         for machine in self.machines:
-            machine_event, sensor_metric, quality_event = machine.update(
+            machine_event, sensor_metric, quality_event, anomaly_event = machine.update(
                 current_time, elapsed_simulated
             )
 
             # Coleta eventos gerados
             if machine_event:
                 all_events["machine_events"].append(machine_event.to_dict())
+                raw_events["machine_events"].append(machine_event)
 
             if sensor_metric:
                 all_events["sensor_metrics"].append(sensor_metric.to_dict())
+                raw_events["sensor_metrics"].append(sensor_metric)
 
             if quality_event:
                 all_events["quality_events"].append(quality_event.to_dict())
+                raw_events["quality_events"].append(quality_event)
 
-        # Exibe eventos gerados (por enquanto no console)
-        self._display_events(all_events)
+            if anomaly_event:
+                raw_events["anomaly_events"].append(anomaly_event)
 
-    def _display_events(self, events: Dict):
+        # Envia eventos para Kafka
+        self._send_to_kafka(raw_events)
+
+        # Exibe eventos gerados no console
+        self._display_events(all_events, current_time)
+
+        # Processa callbacks do Kafka
+        if self.kafka_producer:
+            self.kafka_producer.poll(0)
+
+    def _send_to_kafka(self, events: Dict):
+        """Envia eventos para os tópicos Kafka"""
+        if not self.kafka_producer:
+            return
+
+        # Machine Events
+        for event in events["machine_events"]:
+            self.kafka_producer.send_machine_event(event)
+
+        # Sensor Metrics
+        for metric in events["sensor_metrics"]:
+            self.kafka_producer.send_sensor_metric(metric)
+
+        # Quality Events
+        for event in events["quality_events"]:
+            self.kafka_producer.send_quality_event(event)
+
+        # Anomaly Events
+        for event in events["anomaly_events"]:
+            self.kafka_producer.send_anomaly_event(event)
+
+    def _display_events(self, events: Dict, simulation_time: float):
         """Exibe eventos gerados no console"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        timestamp = datetime.fromtimestamp(simulation_time).strftime("%Y-%m-%d %H:%M:%S")
 
         # Machine Events
         for event in events["machine_events"]:

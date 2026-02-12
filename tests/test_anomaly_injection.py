@@ -1,354 +1,359 @@
 """
-Testes para injeção de anomalias (Failure Injection para ML)
+Testes para o sistema de injeção de anomalias para ML
 """
-import pytest
 import time
-from src.producer.simulator.machine_simulator import MachineSimulator
-from src.producer.schemas.events import MachineStatus
+import random
+import pytest
+from unittest.mock import patch, MagicMock
+
+from src.producer.simulator.machine_simulator import MachineSimulator, MachineConfig
+from src.producer.schemas.events import (
+    MachineStatus,
+    AnomalyType,
+    AnomalySeverity,
+    AnomalyEvent,
+    ANOMALY_PROFILES
+)
+
+
+@pytest.fixture
+def machine_config():
+    """Configuração padrão de máquina para testes"""
+    return MachineConfig(
+        machine_id="TEST_001",
+        machine_type="CNC_MILL",
+        rated_speed=3000,
+        cycle_time=10.0,
+        operator_id="operator_test",
+        shift="day",
+        max_temperature=85.0,
+        optimal_temperature=65.0,
+        max_vibration=5.0,
+        optimal_vibration=1.5,
+        max_pressure=8.0,
+        optimal_pressure=6.5,
+        failure_injection_rate=0.0  # Desabilitado por padrão
+    )
+
+
+@pytest.fixture
+def machine_config_with_failures():
+    """Configuração com injeção de falhas ativada"""
+    return MachineConfig(
+        machine_id="TEST_002",
+        machine_type="CNC_LATHE",
+        rated_speed=2500,
+        cycle_time=8.0,
+        operator_id="operator_test",
+        shift="day",
+        failure_injection_rate=1.0  # 100% de chance para testes
+    )
+
+
+@pytest.fixture
+def machine_simulator(machine_config):
+    """Simulador sem injeção de falhas"""
+    return MachineSimulator(machine_config)
+
+
+@pytest.fixture
+def machine_simulator_with_failures(machine_config_with_failures):
+    """Simulador com injeção de falhas"""
+    return MachineSimulator(machine_config_with_failures)
+
+
+@pytest.fixture
+def mock_settings():
+    """Mock das configurações"""
+    with patch('src.producer.simulator.machine_simulator.settings') as mock:
+        mock.ENABLE_FAILURE_INJECTION = True
+        mock.TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
+        mock.QUALITY_CHECK_PROBABILTY = 0.0
+        mock.PLANNED_DOWNTIME_PROBABILTY = 0.0
+        mock.UNPLANNED_FAILURE_BASE_PROBABILTY = 0.0
+        mock.MAINTENANCE_INTERVAL_HOURS = 168
+        yield mock
+
+
+@pytest.mark.unit
+@pytest.mark.anomaly
+class TestAnomalyProfiles:
+    """Testes para os perfis de anomalias"""
+
+    def test_all_anomaly_types_have_profiles(self):
+        """Verifica que todos os tipos de anomalia têm perfis definidos"""
+        for anomaly_type in AnomalyType:
+            assert anomaly_type in ANOMALY_PROFILES, f"Missing profile for {anomaly_type}"
+
+    def test_profiles_have_required_fields(self):
+        """Verifica que todos os perfis têm os campos necessários"""
+        required_fields = [
+            "severity_range",
+            "duration_range",
+            "multiplier_range",
+            "leads_to_failure",
+            "precursor_pattern"
+        ]
+
+        for anomaly_type, profile in ANOMALY_PROFILES.items():
+            for field in required_fields:
+                assert field in profile, f"Missing {field} in {anomaly_type} profile"
+
+    def test_severity_ranges_are_valid(self):
+        """Verifica que os ranges de severidade são válidos"""
+        for anomaly_type, profile in ANOMALY_PROFILES.items():
+            low, high = profile["severity_range"]
+            assert isinstance(low, AnomalySeverity)
+            assert isinstance(high, AnomalySeverity)
 
 
 @pytest.mark.unit
 @pytest.mark.anomaly
 class TestAnomalyInjectionSetup:
-    """Testes para configuração de injeção de anomalias"""
+    """Testes de configuração da injeção de anomalias"""
 
     def test_anomaly_disabled_by_default(self, machine_simulator):
-        """Testa que anomalia não está ativa por padrão"""
+        """Testa que anomalia está desabilitada por padrão"""
         assert machine_simulator.anomaly_active is False
         assert machine_simulator.anomaly_type is None
-        assert machine_simulator.anomaly_duration == 0
+        assert machine_simulator.anomaly_severity is None
 
     def test_failure_injection_rate_config(self, machine_config_with_failures):
         """Testa configuração de taxa de injeção"""
         assert machine_config_with_failures.failure_injection_rate == 1.0
 
-    def test_failure_injection_rate_default(self, basic_machine_config):
-        """Testa taxa de injeção padrão"""
-        assert basic_machine_config.failure_injection_rate == 0.0
+    def test_failure_injection_rate_default(self, machine_config):
+        """Testa valor padrão da taxa de injeção"""
+        assert machine_config.failure_injection_rate == 0.0
 
 
 @pytest.mark.unit
 @pytest.mark.anomaly
 class TestAnomalyActivation:
-    """Testes para ativação de anomalias"""
+    """Testes de ativação de anomalias"""
 
-    def test_anomaly_injection_with_100_percent_rate(
-        self, machine_simulator_with_failures, mock_settings_with_failures
-    ):
-        """Testa que anomalia é injetada com taxa de 100%"""
+    def test_anomaly_activation_with_high_rate(self, machine_simulator_with_failures, mock_settings):
+        """Testa que anomalia é ativada com taxa alta"""
         current_time = time.time()
 
         # Coloca em RUNNING
-        machine_simulator_with_failures.state_machine.transition_to(
-            MachineStatus.WARMUP, current_time
-        )
-        machine_simulator_with_failures.state_machine.transition_to(
-            MachineStatus.RUNNING, current_time + 10
-        )
+        machine_simulator_with_failures.state_machine.transition_to(MachineStatus.WARMUP, current_time)
+        machine_simulator_with_failures.state_machine.transition_to(MachineStatus.RUNNING, current_time + 10)
 
-        # Após algumas iterações, anomalia deve ser ativada
-        anomaly_activated = False
-        for i in range(50):
-            machine_simulator_with_failures.update(current_time + i, elapsed=1.0)
-            if machine_simulator_with_failures.anomaly_active:
-                anomaly_activated = True
-                break
-
-        assert anomaly_activated is True
-        assert machine_simulator_with_failures.anomaly_type is not None
-
-    def test_anomaly_type_is_valid(
-        self, machine_simulator_with_failures, mock_settings_with_failures
-    ):
-        """Testa que tipo de anomalia injetada é válido"""
-        current_time = time.time()
-
-        # Coloca em RUNNING
-        machine_simulator_with_failures.state_machine.transition_to(
-            MachineStatus.WARMUP, current_time
-        )
-        machine_simulator_with_failures.state_machine.transition_to(
-            MachineStatus.RUNNING, current_time + 10
-        )
-
-        # Ativa anomalia
-        for i in range(50):
+        # Atualiza até ativar anomalia
+        for i in range(10):
             machine_simulator_with_failures.update(current_time + i, elapsed=1.0)
             if machine_simulator_with_failures.anomaly_active:
                 break
 
-        valid_types = [
-            "temperature_spike",
-            "vibration_anomaly",
-            "pressure_drop",
-            "speed_fluctuation",
-            "power_surge"
-        ]
+        assert machine_simulator_with_failures.anomaly_active is True
 
-        if machine_simulator_with_failures.anomaly_active:
-            assert machine_simulator_with_failures.anomaly_type in valid_types
-
-    def test_anomaly_has_duration(
-        self, machine_simulator_with_failures, mock_settings_with_failures
-    ):
-        """Testa que anomalia tem duração definida"""
+    def test_anomaly_type_is_valid_enum(self, machine_simulator_with_failures, mock_settings):
+        """Testa que tipo de anomalia é um enum válido"""
         current_time = time.time()
 
         # Coloca em RUNNING
-        machine_simulator_with_failures.state_machine.transition_to(
-            MachineStatus.WARMUP, current_time
-        )
-        machine_simulator_with_failures.state_machine.transition_to(
-            MachineStatus.RUNNING, current_time + 10
-        )
+        machine_simulator_with_failures.state_machine.transition_to(MachineStatus.WARMUP, current_time)
+        machine_simulator_with_failures.state_machine.transition_to(MachineStatus.RUNNING, current_time + 10)
 
-        # Ativa anomalia
-        for i in range(50):
+        # Atualiza até ativar anomalia
+        for i in range(10):
             machine_simulator_with_failures.update(current_time + i, elapsed=1.0)
             if machine_simulator_with_failures.anomaly_active:
                 break
 
-        if machine_simulator_with_failures.anomaly_active:
-            # Duração deve estar entre 30 e 180 segundos
-            assert 0 < machine_simulator_with_failures.anomaly_duration <= 180
+        assert machine_simulator_with_failures.anomaly_type in list(AnomalyType)
+
+    def test_anomaly_severity_is_valid_enum(self, machine_simulator_with_failures, mock_settings):
+        """Testa que severidade é um enum válido"""
+        current_time = time.time()
+
+        # Coloca em RUNNING
+        machine_simulator_with_failures.state_machine.transition_to(MachineStatus.WARMUP, current_time)
+        machine_simulator_with_failures.state_machine.transition_to(MachineStatus.RUNNING, current_time + 10)
+
+        # Atualiza até ativar anomalia
+        for i in range(10):
+            machine_simulator_with_failures.update(current_time + i, elapsed=1.0)
+            if machine_simulator_with_failures.anomaly_active:
+                break
+
+        assert machine_simulator_with_failures.anomaly_severity in list(AnomalySeverity)
+
+
+@pytest.mark.unit
+@pytest.mark.anomaly
+class TestAnomalyEvent:
+    """Testes para eventos de anomalia"""
+
+    def test_anomaly_event_creation(self):
+        """Testa criação de evento de anomalia"""
+        event = AnomalyEvent(
+            machine_id="test_machine",
+            timestamp="2024-01-01T10:00:00.000Z",
+            anomaly_type=AnomalyType.TEMPERATURE_SPIKE.value,
+            severity=AnomalySeverity.HIGH.value,
+            duration_seconds=120.0,
+            is_precursor=False,
+            temperature=95.0,
+            vibration=3.5,
+            pressure=6.0,
+            speed_rpm=2500,
+            power_consumption=18.0,
+            operating_hours=50.0,
+            wear_factor=0.3
+        )
+
+        assert event.machine_id == "test_machine"
+        assert event.anomaly_type == "temperature_spike"
+        assert event.severity == "high"
+
+    def test_anomaly_event_to_dict(self):
+        """Testa conversão para dicionário"""
+        event = AnomalyEvent(
+            machine_id="test_machine",
+            timestamp="2024-01-01T10:00:00.000Z",
+            anomaly_type=AnomalyType.VIBRATION_SPIKE.value,
+            severity=AnomalySeverity.MEDIUM.value
+        )
+
+        data = event.to_dict()
+        assert isinstance(data, dict)
+        assert data["machine_id"] == "test_machine"
+        assert data["anomaly_type"] == "vibration_spike"
 
 
 @pytest.mark.unit
 @pytest.mark.anomaly
 class TestAnomalyEffects:
-    """Testes para efeitos das anomalias nas métricas"""
+    """Testes dos efeitos das anomalias nos sensores"""
 
-    def test_temperature_spike_anomaly(
-        self, machine_simulator_with_failures, mock_settings_with_failures
-    ):
-        """Testa efeito de pico de temperatura"""
-        current_time = time.time()
-
-        # Força anomalia de temperatura
-        machine_simulator_with_failures.anomaly_active = True
-        machine_simulator_with_failures.anomaly_type = "temperature_spike"
-        machine_simulator_with_failures.anomaly_duration = 60.0
-
-        # Gera métrica
-        sensor_metric = machine_simulator_with_failures._generate_sensor_metrics(current_time)
-        sensor_metric = machine_simulator_with_failures._inject_anomaly(
-            sensor_metric, current_time, elapsed=1.0
-        )
-
-        # Temperatura deve estar acima do máximo
-        max_temp = machine_simulator_with_failures.config.max_temperature
-        assert sensor_metric.temperature > max_temp
-
-    def test_vibration_anomaly(
-        self, machine_simulator_with_failures, mock_settings_with_failures
-    ):
-        """Testa efeito de vibração anormal"""
-        current_time = time.time()
-
-        # Força anomalia de vibração
-        machine_simulator_with_failures.anomaly_active = True
-        machine_simulator_with_failures.anomaly_type = "vibration_anomaly"
-        machine_simulator_with_failures.anomaly_duration = 60.0
-
-        # Gera métrica
-        sensor_metric = machine_simulator_with_failures._generate_sensor_metrics(current_time)
-        sensor_metric = machine_simulator_with_failures._inject_anomaly(
-            sensor_metric, current_time, elapsed=1.0
-        )
-
-        # Vibração deve estar acima do máximo
-        max_vib = machine_simulator_with_failures.config.max_vibration
-        assert sensor_metric.vibration > max_vib
-
-    def test_pressure_drop_anomaly(
-        self, machine_simulator_with_failures, mock_settings_with_failures
-    ):
-        """Testa efeito de queda de pressão"""
-        current_time = time.time()
-
-        # Força anomalia de pressão
-        machine_simulator_with_failures.anomaly_active = True
-        machine_simulator_with_failures.anomaly_type = "pressure_drop"
-        machine_simulator_with_failures.anomaly_duration = 60.0
-
-        # Gera métrica
-        sensor_metric = machine_simulator_with_failures._generate_sensor_metrics(current_time)
-        sensor_metric = machine_simulator_with_failures._inject_anomaly(
-            sensor_metric, current_time, elapsed=1.0
-        )
-
-        # Pressão deve estar abaixo do ideal
-        optimal_pressure = machine_simulator_with_failures.config.optimal_pressure
-        assert sensor_metric.pressure < optimal_pressure * 0.7
-
-    def test_speed_fluctuation_anomaly(
-        self, machine_simulator_with_failures, mock_settings_with_failures
-    ):
-        """Testa efeito de flutuação de velocidade"""
-        current_time = time.time()
-
-        # Coloca em RUNNING para ter RPM
-        machine_simulator_with_failures.state_machine.transition_to(
-            MachineStatus.WARMUP, current_time
-        )
-        machine_simulator_with_failures.state_machine.transition_to(
-            MachineStatus.RUNNING, current_time + 10
-        )
-
-        # Gera métrica normal
-        normal_metric = machine_simulator_with_failures._generate_sensor_metrics(current_time)
-        normal_rpm = normal_metric.speed_rpm
-
-        # Força anomalia de velocidade
-        machine_simulator_with_failures.anomaly_active = True
-        machine_simulator_with_failures.anomaly_type = "speed_fluctuation"
-        machine_simulator_with_failures.anomaly_duration = 60.0
-
-        # Gera métrica com anomalia
-        anomaly_metric = machine_simulator_with_failures._generate_sensor_metrics(current_time)
-        anomaly_metric = machine_simulator_with_failures._inject_anomaly(
-            anomaly_metric, current_time, elapsed=1.0
-        )
-
-        # RPM deve ser diferente (flutuação)
-        # Pode ser maior ou menor, mas deve ter mudado
-        assert abs(anomaly_metric.speed_rpm - anomaly_metric.speed_rpm) >= 0
-
-    def test_power_surge_anomaly(
-        self, machine_simulator_with_failures, mock_settings_with_failures
-    ):
-        """Testa efeito de pico de consumo"""
-        current_time = time.time()
-
-        # Gera métrica normal
-        normal_metric = machine_simulator_with_failures._generate_sensor_metrics(current_time)
-        normal_power = normal_metric.power_consumption
-
-        # Força anomalia de potência
-        machine_simulator_with_failures.anomaly_active = True
-        machine_simulator_with_failures.anomaly_type = "power_surge"
-        machine_simulator_with_failures.anomaly_duration = 60.0
-
-        # Gera métrica com anomalia
-        anomaly_metric = machine_simulator_with_failures._generate_sensor_metrics(current_time)
-        anomaly_metric = machine_simulator_with_failures._inject_anomaly(
-            anomaly_metric, current_time, elapsed=1.0
-        )
-
-        # Consumo deve ser maior (pelo menos 1.5x)
-        # Nota: normal_power pode ser usado da métrica normal gerada
-        assert anomaly_metric.power_consumption > 0
-
-
-@pytest.mark.unit
-@pytest.mark.anomaly
-class TestAnomalyDuration:
-    """Testes para duração das anomalias"""
-
-    def test_anomaly_duration_decreases(
-        self, machine_simulator_with_failures, mock_settings_with_failures
-    ):
-        """Testa que duração da anomalia diminui com o tempo"""
-        current_time = time.time()
-
-        # Força anomalia
-        machine_simulator_with_failures.anomaly_active = True
-        machine_simulator_with_failures.anomaly_type = "temperature_spike"
-        machine_simulator_with_failures.anomaly_duration = 100.0
-
-        initial_duration = machine_simulator_with_failures.anomaly_duration
-
-        # Gera métrica (isso decrementa duração)
-        sensor_metric = machine_simulator_with_failures._generate_sensor_metrics(current_time)
-        machine_simulator_with_failures._inject_anomaly(
-            sensor_metric, current_time, elapsed=10.0
-        )
-
-        # Duração deve ter diminuído
-        assert machine_simulator_with_failures.anomaly_duration < initial_duration
-        assert machine_simulator_with_failures.anomaly_duration == pytest.approx(90.0, abs=0.1)
-
-    def test_anomaly_ends_after_duration(
-        self, machine_simulator_with_failures, mock_settings_with_failures
-    ):
-        """Testa que anomalia termina após duração expirar"""
-        current_time = time.time()
-
-        # Força anomalia com duração curta
-        machine_simulator_with_failures.anomaly_active = True
-        machine_simulator_with_failures.anomaly_type = "temperature_spike"
-        machine_simulator_with_failures.anomaly_duration = 5.0
-
-        # Simula passagem de tempo suficiente
-        sensor_metric = machine_simulator_with_failures._generate_sensor_metrics(current_time)
-        machine_simulator_with_failures._inject_anomaly(
-            sensor_metric, current_time, elapsed=10.0
-        )
-
-        # Anomalia deve ter terminado
-        assert machine_simulator_with_failures.anomaly_active is False
-        assert machine_simulator_with_failures.anomaly_type is None
-
-    def test_multiple_anomaly_cycles(
-        self, machine_simulator_with_failures, mock_settings_with_failures
-    ):
-        """Testa que múltiplas anomalias podem ocorrer em sequência"""
+    def test_anomaly_affects_sensor_values(self, machine_simulator_with_failures, mock_settings):
+        """Testa que anomalia afeta valores dos sensores"""
         current_time = time.time()
 
         # Coloca em RUNNING
-        machine_simulator_with_failures.state_machine.transition_to(
-            MachineStatus.WARMUP, current_time
-        )
-        machine_simulator_with_failures.state_machine.transition_to(
-            MachineStatus.RUNNING, current_time + 10
-        )
+        machine_simulator_with_failures.state_machine.transition_to(MachineStatus.WARMUP, current_time)
+        machine_simulator_with_failures.state_machine.transition_to(MachineStatus.RUNNING, current_time + 10)
 
-        anomaly_count = 0
+        # Coleta métricas normais primeiro
+        _, normal_metric, _, _ = machine_simulator_with_failures.update(current_time, elapsed=1.0)
 
-        # Simula operação prolongada
-        for i in range(200):
-            _, sensor_metric, _ = machine_simulator_with_failures.update(
-                current_time + i, elapsed=1.0
-            )
+        # Força ativação de anomalia específica
+        machine_simulator_with_failures.anomaly_active = True
+        machine_simulator_with_failures.anomaly_type = AnomalyType.TEMPERATURE_SPIKE
+        machine_simulator_with_failures.anomaly_severity = AnomalySeverity.HIGH
+        machine_simulator_with_failures.anomaly_duration = 100
+        machine_simulator_with_failures.anomaly_start_time = current_time
+        machine_simulator_with_failures.anomaly_is_precursor = False
+        machine_simulator_with_failures.anomaly_base_values = {
+            "temperature": normal_metric.temperature,
+            "vibration": normal_metric.vibration,
+            "pressure": normal_metric.pressure,
+            "speed_rpm": normal_metric.speed_rpm,
+            "power_consumption": normal_metric.power_consumption,
+        }
 
-            # Conta quando anomalia está ativa
-            if machine_simulator_with_failures.anomaly_active:
-                anomaly_count += 1
+        # Coleta métricas com anomalia
+        _, anomaly_metric, _, _ = machine_simulator_with_failures.update(current_time + 1, elapsed=1.0)
 
-        # Com taxa de 100%, deve ter tido pelo menos uma anomalia
-        assert anomaly_count > 0
+        # Temperatura deve ser elevada durante anomalia de temperatura
+        assert anomaly_metric.temperature > machine_simulator_with_failures.config.optimal_temperature
 
 
 @pytest.mark.unit
 @pytest.mark.anomaly
 class TestAnomalyDisabled:
-    """Testes para quando injeção de anomalias está desabilitada"""
+    """Testes quando injeção está desabilitada"""
 
     def test_no_anomaly_when_disabled(self, machine_simulator, mock_settings):
-        """Testa que não há anomalias quando desabilitado"""
+        """Testa que não há anomalia quando desabilitado"""
+        mock_settings.ENABLE_FAILURE_INJECTION = False
         current_time = time.time()
 
         # Coloca em RUNNING
         machine_simulator.state_machine.transition_to(MachineStatus.WARMUP, current_time)
         machine_simulator.state_machine.transition_to(MachineStatus.RUNNING, current_time + 10)
 
-        # Simula operação
-        for i in range(100):
+        # Atualiza várias vezes
+        for i in range(50):
             machine_simulator.update(current_time + i, elapsed=1.0)
 
-        # Nunca deve ativar anomalia
+        # Anomalia nunca deve ativar
         assert machine_simulator.anomaly_active is False
 
     def test_metrics_normal_when_disabled(self, machine_simulator, mock_settings):
-        """Testa que métricas são normais quando injeção desabilitada"""
+        """Testa que métricas são normais quando desabilitado"""
+        mock_settings.ENABLE_FAILURE_INJECTION = False
         current_time = time.time()
 
         # Coloca em RUNNING
         machine_simulator.state_machine.transition_to(MachineStatus.WARMUP, current_time)
         machine_simulator.state_machine.transition_to(MachineStatus.RUNNING, current_time + 10)
 
-        _, sensor_metric, _ = machine_simulator.update(current_time, elapsed=1.0)
+        _, sensor_metric, _, _ = machine_simulator.update(current_time, elapsed=1.0)
 
         # Métricas devem estar dentro dos limites normais
         assert sensor_metric.temperature <= machine_simulator.config.max_temperature * 1.2
         assert sensor_metric.vibration <= machine_simulator.config.max_vibration * 1.2
+
+
+@pytest.mark.unit
+@pytest.mark.anomaly
+class TestPrecursorPatterns:
+    """Testes para padrões precursores de falhas"""
+
+    def test_precursor_anomalies_exist(self):
+        """Verifica que existem anomalias precursoras"""
+        precursor_types = [
+            anomaly_type for anomaly_type, profile in ANOMALY_PROFILES.items()
+            if profile["precursor_pattern"]
+        ]
+        assert len(precursor_types) > 0
+
+    def test_precursor_anomalies_have_longer_duration(self):
+        """Verifica que anomalias precursoras tendem a ter durações mais longas"""
+        precursor_durations = []
+        non_precursor_durations = []
+
+        for anomaly_type, profile in ANOMALY_PROFILES.items():
+            avg_duration = sum(profile["duration_range"]) / 2
+            if profile["precursor_pattern"]:
+                precursor_durations.append(avg_duration)
+            else:
+                non_precursor_durations.append(avg_duration)
+
+        # Em média, precursores devem ter durações maiores
+        avg_precursor = sum(precursor_durations) / len(precursor_durations)
+        avg_non_precursor = sum(non_precursor_durations) / len(non_precursor_durations)
+
+        assert avg_precursor > avg_non_precursor
+
+
+@pytest.mark.unit
+@pytest.mark.anomaly
+class TestFailureProbability:
+    """Testes para probabilidade de falhas"""
+
+    def test_all_anomalies_have_failure_probability(self):
+        """Verifica que todas anomalias têm probabilidade de falha"""
+        for anomaly_type, profile in ANOMALY_PROFILES.items():
+            assert 0 <= profile["leads_to_failure"] <= 1
+
+    def test_critical_anomalies_have_higher_failure_rate(self):
+        """Verifica que anomalias críticas têm maior probabilidade de falha"""
+        critical_rates = []
+        non_critical_rates = []
+
+        for anomaly_type, profile in ANOMALY_PROFILES.items():
+            _, high_severity = profile["severity_range"]
+            if high_severity == AnomalySeverity.CRITICAL:
+                critical_rates.append(profile["leads_to_failure"])
+            else:
+                non_critical_rates.append(profile["leads_to_failure"])
+
+        if critical_rates and non_critical_rates:
+            avg_critical = sum(critical_rates) / len(critical_rates)
+            avg_non_critical = sum(non_critical_rates) / len(non_critical_rates)
+            # Anomalias críticas devem ter maior probabilidade de falha
+            assert avg_critical >= avg_non_critical

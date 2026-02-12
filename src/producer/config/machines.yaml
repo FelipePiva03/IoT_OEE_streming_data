@@ -1,28 +1,29 @@
-# Configuração das 5 máquinas industriais
+# Configuração das 5 máquinas industriais - Indústria Automotiva
+# Máquinas de corte, dobra, estampagem para fabricação de peças metálicas
 machines:
   - id: M001
-    name: "CNC Lathe Alpha"
-    type: CNC_LATHE
-    location: "Production Line A"
+    name: "Prensa Estampagem 400T"
+    type: STAMPING_PRESS
+    location: "Linha Estamparia A"
     specs:
-      max_temperature: 85.0        # °C
-      optimal_temperature: 65.0
-      max_vibration: 5.0            # mm/s
-      optimal_vibration: 1.5
-      max_rpm: 2000
-      optimal_rpm: 1500
-      max_pressure: 8.0             # bar
-      optimal_pressure: 6.5
-      cycle_time: 45                # segundos
+      max_temperature: 75.0        # °C - temperatura do óleo hidráulico
+      optimal_temperature: 55.0
+      max_vibration: 8.0           # mm/s - prensas vibram mais
+      optimal_vibration: 2.0
+      max_rpm: 25                  # golpes/minuto
+      optimal_rpm: 15
+      max_pressure: 400.0          # toneladas
+      optimal_pressure: 320.0
+      cycle_time: 4                # segundos = 15 golpes/min
     reliability:
-      base_uptime: 0.95             # 95% uptime
-      mtbf_hours: 120               # Mean Time Between Failures
-      mttr_hours: 2                 # Mean Time To Repair
-      failure_injection_rate: 0.03  # 3% chance de injetar anomalias para ML
+      base_uptime: 0.94
+      mtbf_hours: 120
+      mttr_hours: 2.5
+      failure_injection_rate: 0.005  # 0.5% - desalinhamento matriz, travamento
     degradation:
-      temperature_increase_rate: 0.05  # °C por hora de operação
-      vibration_increase_rate: 0.02    # mm/s por hora
-      quality_degradation_rate: 0.001  # redução % por hora
+      temperature_increase_rate: 0.04
+      vibration_increase_rate: 0.03
+      quality_degradation_rate: 0.001
     shift_schedule:
       - start: "06:00"
         end: "14:00"
@@ -35,28 +36,28 @@ machines:
         efficiency: 0.90
 
   - id: M002
-    name: "Milling Machine Beta"
-    type: MILLING_MACHINE
-    location: "Production Line A"
+    name: "Dobradeira CNC Trumpf 170T"
+    type: BENDING_MACHINE
+    location: "Linha Conformação B"
     specs:
-      max_temperature: 80.0
-      optimal_temperature: 60.0
-      max_vibration: 4.5
-      optimal_vibration: 1.2
-      max_rpm: 1800
-      optimal_rpm: 1400
-      max_pressure: 7.5
-      optimal_pressure: 6.0
-      cycle_time: 60
+      max_temperature: 65.0
+      optimal_temperature: 45.0
+      max_vibration: 4.0
+      optimal_vibration: 1.0
+      max_rpm: 12                  # dobras/minuto
+      optimal_rpm: 6
+      max_pressure: 170.0          # toneladas
+      optimal_pressure: 140.0
+      cycle_time: 10               # segundos = 6 dobras/min
     reliability:
       base_uptime: 0.92
       mtbf_hours: 100
-      mttr_hours: 2.5
-      failure_injection_rate: 0.04  # 4% - máquina mais propensa a anomalias
+      mttr_hours: 2
+      failure_injection_rate: 0.008  # 0.8% - ângulo incorreto, desgaste punção
     degradation:
-      temperature_increase_rate: 0.06
-      vibration_increase_rate: 0.03
-      quality_degradation_rate: 0.0015
+      temperature_increase_rate: 0.03
+      vibration_increase_rate: 0.02
+      quality_degradation_rate: 0.0012
     shift_schedule:
       - start: "06:00"
         end: "14:00"
@@ -69,27 +70,27 @@ machines:
         efficiency: 0.88
 
   - id: M003
-    name: "Hydraulic Press Gamma"
-    type: PRESS
-    location: "Production Line B"
+    name: "Corte Laser Fibra 6kW"
+    type: LASER_CUTTING
+    location: "Linha Corte C"
     specs:
-      max_temperature: 70.0
-      optimal_temperature: 50.0
-      max_vibration: 3.0
-      optimal_vibration: 0.8
-      max_rpm: 500
-      optimal_rpm: 350
-      max_pressure: 10.0
-      optimal_pressure: 8.5
-      cycle_time: 30
+      max_temperature: 120.0       # °C - cabeçote laser aquece
+      optimal_temperature: 80.0
+      max_vibration: 2.0           # mm/s - laser é preciso, pouca vibração
+      optimal_vibration: 0.5
+      max_rpm: 0                   # não aplica
+      optimal_rpm: 0
+      max_pressure: 20.0           # bar - pressão do gás de assistência
+      optimal_pressure: 15.0
+      cycle_time: 15               # segundos = 4 peças/min
     reliability:
-      base_uptime: 0.98
-      mtbf_hours: 150
-      mttr_hours: 1.5
-      failure_injection_rate: 0.02  # 2% - máquina mais confiável
+      base_uptime: 0.96
+      mtbf_hours: 200
+      mttr_hours: 3
+      failure_injection_rate: 0.004  # 0.4% - lente suja, gás acabando, falha foco
     degradation:
-      temperature_increase_rate: 0.03
-      vibration_increase_rate: 0.015
+      temperature_increase_rate: 0.06
+      vibration_increase_rate: 0.01
       quality_degradation_rate: 0.0008
     shift_schedule:
       - start: "06:00"
@@ -103,62 +104,62 @@ machines:
         efficiency: 0.92
 
   - id: M004
-    name: "CNC Lathe Delta (Legacy)"
-    type: CNC_LATHE
-    location: "Production Line B"
+    name: "Puncionadeira CNC Amada"
+    type: PUNCH_PRESS
+    location: "Linha Estamparia A"
     specs:
-      max_temperature: 85.0
-      optimal_temperature: 65.0
-      max_vibration: 5.5
-      optimal_vibration: 2.0
-      max_rpm: 2000
-      optimal_rpm: 1500
-      max_pressure: 8.0
-      optimal_pressure: 6.5
-      cycle_time: 50
+      max_temperature: 70.0
+      optimal_temperature: 50.0
+      max_vibration: 6.0           # mm/s - puncionadeiras vibram bastante
+      optimal_vibration: 1.5
+      max_rpm: 30                  # golpes/minuto
+      optimal_rpm: 20
+      max_pressure: 30.0           # toneladas
+      optimal_pressure: 25.0
+      cycle_time: 3                # segundos = 20 golpes/min
     reliability:
-      base_uptime: 0.88              # Máquina mais antiga
+      base_uptime: 0.90
       mtbf_hours: 80
-      mttr_hours: 3
-      failure_injection_rate: 0.08  # 8% - máquina legacy com mais problemas
+      mttr_hours: 1.5
+      failure_injection_rate: 0.01  # 1% - ferramentas desgastam rápido
     degradation:
-      temperature_increase_rate: 0.08  # Degrada mais rápido
+      temperature_increase_rate: 0.05
       vibration_increase_rate: 0.04
-      quality_degradation_rate: 0.002
+      quality_degradation_rate: 0.0015
     shift_schedule:
       - start: "06:00"
         end: "14:00"
-        efficiency: 0.95
+        efficiency: 0.96
       - start: "14:00"
         end: "22:00"
-        efficiency: 0.92
+        efficiency: 0.93
       - start: "22:00"
         end: "06:00"
-        efficiency: 0.85
+        efficiency: 0.87
 
   - id: M005
-    name: "Welding Robot Epsilon"
-    type: WELDING_ROBOT
-    location: "Production Line C"
+    name: "Solda Ponto Robotizada Fanuc"
+    type: SPOT_WELDING
+    location: "Linha Montagem D"
     specs:
-      max_temperature: 95.0
-      optimal_temperature: 70.0
-      max_vibration: 2.5
-      optimal_vibration: 0.5
-      max_rpm: 1200
-      optimal_rpm: 900
-      max_pressure: 6.0
-      optimal_pressure: 5.0
-      cycle_time: 40
+      max_temperature: 200.0       # °C - eletrodos aquecem muito
+      optimal_temperature: 120.0
+      max_vibration: 3.0
+      optimal_vibration: 0.8
+      max_rpm: 15                  # pontos/minuto
+      optimal_rpm: 10
+      max_pressure: 5.0            # kN - pressão dos eletrodos
+      optimal_pressure: 4.0
+      cycle_time: 6                # segundos = 10 pontos/min
     reliability:
       base_uptime: 0.93
-      mtbf_hours: 110
+      mtbf_hours: 150
       mttr_hours: 2
-      failure_injection_rate: 0.05  # 5% - taxa moderada de anomalias
+      failure_injection_rate: 0.006  # 0.6% - desgaste eletrodo, respingos
     degradation:
-      temperature_increase_rate: 0.07
-      vibration_increase_rate: 0.025
-      quality_degradation_rate: 0.0012
+      temperature_increase_rate: 0.08  # Aquece rápido
+      vibration_increase_rate: 0.02
+      quality_degradation_rate: 0.001
     shift_schedule:
       - start: "06:00"
         end: "14:00"

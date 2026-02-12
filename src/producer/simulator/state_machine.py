@@ -47,16 +47,16 @@ class StateMachine:
         ],
     }
     
-    # Durações típicas (em segundos)
+    # Durações típicas (em segundos) - valores realistas de fábrica
     STATE_DURATIONS: Dict[MachineStatus, tuple] = {
-        MachineStatus.IDLE: (5, 15),               # 5s - 15s (para testes rápidos)
-        MachineStatus.WARMUP: (10, 20),            # 10s - 20s
-        MachineStatus.RUNNING: (30, 120),          # 30s - 2min
-        MachineStatus.SETUP: (15, 30),             # 15s - 30s
-        MachineStatus.PLANNED_DOWNTIME: (20, 40),  # 20s - 40s
-        MachineStatus.UNPLANNED_DOWNTIME: (25, 60), # 25s - 1min
-        MachineStatus.MAINTENANCE: (40, 80),       # 40s - 80s
-        MachineStatus.COOLDOWN: (10, 20),          # 10s - 20s
+        MachineStatus.IDLE: (60, 300),              # 1-5 min (aguardando início do turno)
+        MachineStatus.WARMUP: (180, 420),           # 3-7 min (aquecimento da máquina)
+        MachineStatus.RUNNING: (1800, 14400),       # 30min-4h (produção contínua)
+        MachineStatus.SETUP: (300, 900),            # 5-15 min (troca de ferramentas)
+        MachineStatus.PLANNED_DOWNTIME: (1800, 3600),  # 30min-1h (almoço, intervalos)
+        MachineStatus.UNPLANNED_DOWNTIME: (600, 7200), # 10min-2h (falhas inesperadas)
+        MachineStatus.MAINTENANCE: (7200, 18000),   # 2-5h (manutenção preventiva)
+        MachineStatus.COOLDOWN: (120, 300),         # 2-5 min (resfriamento)
     }
 
     def __init__(self, initial_state: MachineStatus = MachineStatus.IDLE):
@@ -127,6 +127,7 @@ class StateMachine:
             MachineStatus.MAINTENANCE: MachineStatus.WARMUP,
             MachineStatus.PLANNED_DOWNTIME: MachineStatus.WARMUP,
             MachineStatus.SETUP: MachineStatus.RUNNING,
+            MachineStatus.UNPLANNED_DOWNTIME: MachineStatus.WARMUP,  # Recupera após downtime
         }
         return auto_transitions.get(self.current_state)
     
